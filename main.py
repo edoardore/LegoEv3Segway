@@ -11,17 +11,17 @@ ev3 = EV3Brick()
 rack = Motor(Port.B)
 wheelDx = Motor(Port.A)
 wheelSx = Motor(Port.D)
+motor = MoveTank(OUTPUT_A, OUTPUT_D)  # Drive using two motors (tank mode)
 gyro = GyroSensor(Port.S4)
 
 
 def initOffset(gyro):
-    values = []
     offset = 0
-    i=0
+    i = 0
     while i < 100:
         offset += gyro.speed()
-        i+=1
-    offset=offset/100
+        i += 1
+    offset = offset/100
     return offset
 
 
@@ -35,12 +35,19 @@ def sensor(Offset_gyro):
     Psi_dot = Psi_dot*3.14159265358979323846/180
     return (Theta, Psi_dot)
 
+def integrate(ThetaList, Ti, Tf, Ts=0.1):
+    i = Ti
+    s = 0
+    while i <= Tf:
+        s += ThetaList[i]*Ts
+        i += Ts
+    return s
 
 def observer(Psi_dot, Theta, Offset_gyro):
     Psi_dot -= Offset_gyro
-    #Theta_dot = np.diff(Theta)
-    #Psi = np.quad(Psi_dot)
-    #Theta_int = np.quad(Theta)
+    Theta_dot = (wheelDx.speed()+wheelSx.speed())/2
+    Theta_dot=Theta_dot*3.14159265358979323846/180
+    Psi = gyro.angle()-Offset_gyro
     return(Theta, Psi, Theta_dot, Psi_dot, Theta_int)
 
 
@@ -58,25 +65,39 @@ def control(Theta, Psi, Theta_dot, Psi_dot, Theta_int):
 
 
 def rackUp(r):
-    r.run_target(500, 90)
+    r.run_target(900, 90)
 
 
 def rackDown(r):
-    r.run_target(500, 0)
+    r.run_target(900, 0)
 
 
-def main():
-    offset = initOffset(gyro)
+def run():
+    offset=initOffset(gyro)
     print(offset)
     time.sleep(1)
     rackUp(rack)
+    u=[[]]
+    ThetaList=[]
+    millisecondsStart = int(round(time.time() * 1000))
     # TODO esegue modalità segway per 10 secondi
+    while true:
+        time=int(round(time.time() * 1000))-millisecondsStart
+        print(time)
+        if time>10000:
+            break
+        (Theta, Psi_dot)=sensor(offset)
+        (Theta, Psi, Theta_dot, Psi_dot) = observer(Theta, Psi_dot, offset)    
+        ThetaList.append(Theta)  
+        Theta_int=integrate(ThetaList, millisecondsStart, time)  
+        u = control(Theta, Psi, Theta_dot, Psi_dot, Theta_int)
+        #TODO & MOVE TANK
+        motor.run_angle(u[2], u[0], then=Stop.HOLD, wait=True)
     rackDown(rack)
+    # Play a sound.
+    ev3.speaker.beep()
+    # Play another beep sound.
+    ev3.speaker.beep(600, 300)
 
-
-# Play a sound.
-ev3.speaker.beep()
-# Play another beep sound.
-ev3.speaker.beep(600, 300)
-
-main()
+run()
+    
