@@ -1,18 +1,20 @@
-#!/usr/bin/env pybricks-micropython
-from pybricks.hubs import EV3Brick
-from pybricks.ev3devices import Motor, GyroSensor
-from pybricks.parameters import Port
+#!/usr/bin/env python3
+
+from ev3dev2.led import Leds
+from ev3dev2.motor import Motor, MoveTank, OUTPUT_A, OUTPUT_D, OUTPUT_B
+from ev3dev2.sound import Sound
+from ev3dev2.sensor import INPUT_4
+from ev3dev2.sensor.lego import GyroSensor
 import time
 
 
-# Initialize the EV3 brick.
-ev3 = EV3Brick()
+
 # Initialize ports
-rack = Motor(Port.B)
-wheelDx = Motor(Port.A)
-wheelSx = Motor(Port.D)
+rack = Motor(OUTPUT_B)
+wheelDx = Motor(OUTPUT_A)
+wheelSx = Motor(OUTPUT_D)
 motor = MoveTank(OUTPUT_A, OUTPUT_D)  # Drive using two motors (tank mode)
-gyro = GyroSensor(Port.S4)
+gyro = GyroSensor(INPUT_4)
 
 
 def initOffset(gyro):
@@ -99,5 +101,4 @@ def run():
     # Play another beep sound.
     ev3.speaker.beep(600, 300)
 
-run()
-    
+motor.on(50, 50)
