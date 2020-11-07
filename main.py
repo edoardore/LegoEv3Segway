@@ -27,20 +27,21 @@ class Controllo(threading.Thread):
         while i < 100:
             offset += gyro.rate
             i += 1
-        offset = offset/100*3.14159265358979323846/180
+        offset = offset/100*3.1416/180
         print('Offset is '+str(offset), file=stderr)
         return offset
 
     def sensor(self, Offset_gyro):
-        angleDx = wheelDx.position
-        angleSx = wheelSx.position
-        Theta = (angleDx+angleSx)/2
-        Theta = Theta*3.14159265358979323846/180
+        angleDx = wheelDx.position+95
+        angleSx = wheelSx.position+95
+        ThetaM = (angleDx+angleSx)/2
+        ThetaM = ThetaM*3.1416/180
+        ThetaM=ThetaM%6.28
         Psi_dot = gyro.rate+Offset_gyro
-        Psi_dot = Psi_dot*3.14159265358979323846/180
-        print('Sensor Theta is '+str(Theta) +
+        Psi_dot = Psi_dot*3.1416/180
+        print('Sensor ThetaM is '+str(ThetaM) +
               '\nSensor psi_dot is '+str(Psi_dot), file=stderr)
-        return (Theta, Psi_dot)
+        return (ThetaM, Psi_dot)
 
     def integrate(self, ThetaList, Ti, Tf):
         i = Ti
@@ -54,16 +55,29 @@ class Controllo(threading.Thread):
         print('Integrate is '+str(s), file=stderr)
         return s
 
+    def derivativeTheta(self, L, x, ti, tf):
+        t=tf-ti/len(L)
+        if len(L)==1:
+            return L[0]/(2*t)
+        else:
+            return (L[x+1] - L[x-1]) / (2*t)
+
+    def derivativePsi(self, L, x, ti, tf):
+        t=tf-ti/len(L)
+        if len(L)==1:
+            return (L[0]+8.7*3.14/180)/(2*t)
+        else:
+            return (L[x+1] - L[x-1]) / (2*t)
+
     def observer(self, Psi_dot, Theta, Offset_gyro):
         Psi_dot -= Offset_gyro
-        Theta_dot = (wheelDx.speed+wheelSx.speed)/2
-        Theta_dot = Theta_dot*3.14159265358979323846/180
-        (Psi, rate) = gyro.angle_and_rate
-        Psi = Psi*3.14159265358979323846/180
-        print('Observer Theta is '+str(Theta)+'\nObserver Psi is '+str(Psi) +
-              '\nObserver Theta_dot is '+str(Theta_dot)+'\nObserver Psi_dot '+str(Psi_dot), file=stderr)
-        return(Theta, Psi, Theta_dot, Psi_dot)
-
+        #Theta_dot = (wheelDx.speed+wheelSx.speed)/2
+        #Theta_dot = Theta_dot*3.1416/180
+        #print('Observer Theta is '+str(Theta) +
+        #      '\nObserver Theta_dot is '+str(Theta_dot)+'\nObserver Psi_dot '+str(Psi_dot), file=stderr)
+        #return(Theta, Theta_dot, Psi_dot)
+        return(Psi_dot)
+    
     def control(self, Theta, Psi, Theta_dot, Psi_dot, Theta_int):
         K = [[-0.855, - 44.7896, - 0.9936, - 4.6061, -0.5000],
              [-0.855, - 44.7896, - 0.9936, - 4.6061, - 0.5000]]
@@ -90,15 +104,31 @@ class Controllo(threading.Thread):
         self.rackUp(rack)
         u = [[]]
         ThetaList = []
+        Psi_dotList=[]
         millisecondsStart = time()
+        u = self.control(0, 0, 0, 0, 0)
+        ThetaList.append(0)
+        Psi_dotList.append(0)
+        self.m.update(u)
+        PI=3.14
         while True:
             t = time()
             if (t-millisecondsStart) > 10:
                 break
-            (Theta, Psi_dot) = self.sensor(offset)
-            (Theta, Psi, Theta_dot, Psi_dot) = self.observer(
-                Psi_dot, Theta, offset)
+            (ThetaM, Psi_dot) = self.sensor(offset)
+            #(Theta, Theta_dot, Psi_dot) = self.observer(Psi_dot, Theta, offset)
+            Psi_dot-=offset
+            Psi_dot=Psi_dot%(2*PI)
+            Psi_dotList.append(Psi_dot)
+            Psi=self.integrate(Psi_dotList, millisecondsStart, t)
+            print("Observer Psi is "+str(Psi), file=stderr)
+            Theta=ThetaM+Psi
+            print("Observer Theta is "+str(Theta), file=stderr)
             ThetaList.append(Theta)
+            Theta_dot=self.derivativeTheta(ThetaList, len(ThetaList)-2, millisecondsStart, t)
+            print("Observer Theta_dot is "+str(Theta_dot), file=stderr)
+            Psi_dot=self.derivativePsi(Psi_dotList, len(Psi_dotList)-2, millisecondsStart, t)
+            print("Observer Psi_dot is "+str(Psi_dot), file=stderr)
             Theta_int = self.integrate(ThetaList, millisecondsStart, t)
             u = self.control(Theta, Psi, Theta_dot, Psi_dot, Theta_int)
             self.m.update(u)
@@ -107,10 +137,9 @@ class Controllo(threading.Thread):
 
 class Motore:
     def update(self, u):
-        speed = abs(u[1][0])*180/3.14
-        if speed > 1050:
-            speed = 1050
-        motor.on_for_seconds(SpeedDPS(speed), SpeedDPS(speed), 0.1, brake=False, block=False)
+        Vr = u[1][0]
+        Vr = Vr*100/8.2
+        motor.on_for_seconds(Vr, Vr, 0.05, brake=False, block=False)
 
 
 motore = Motore()
