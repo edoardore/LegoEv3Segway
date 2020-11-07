@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from ev3dev2.led import Leds
-from ev3dev2.motor import Motor, MoveTank, OUTPUT_A, OUTPUT_D, OUTPUT_B, SpeedDPS
+from ev3dev2.motor import Motor, MoveTank, OUTPUT_A, OUTPUT_C, OUTPUT_B, SpeedDPS
 from ev3dev2.sound import Sound
 from ev3dev2.sensor import INPUT_4
 from ev3dev2.sensor.lego import GyroSensor
@@ -11,8 +11,8 @@ import threading
 
 rack = Motor(OUTPUT_B)
 wheelDx = Motor(OUTPUT_A)
-wheelSx = Motor(OUTPUT_D)
-motor = MoveTank(OUTPUT_A, OUTPUT_D)
+wheelSx = Motor(OUTPUT_C)
+motor = MoveTank(OUTPUT_A, OUTPUT_C)
 gyro = GyroSensor(INPUT_4)
 
 
@@ -24,20 +24,22 @@ class Controllo(threading.Thread):
     def initOffset(self, gyro):
         offset = 0
         i = 0
+        t=time()
         while i < 100:
             offset += gyro.rate
             i += 1
-        offset = offset/100*3.1416/180
+        tt=time()-t
+        offset = offset/t*3.1416/180
         print('Offset is '+str(offset), file=stderr)
         return offset
 
     def sensor(self, Offset_gyro):
-        angleDx = wheelDx.position+95
-        angleSx = wheelSx.position+95
+        angleDx = wheelDx.position+120
+        angleSx = wheelSx.position+120
         ThetaM = (angleDx+angleSx)/2
         ThetaM = ThetaM*3.1416/180
         ThetaM=ThetaM%6.28
-        Psi_dot = gyro.rate+Offset_gyro
+        Psi_dot = gyro.rate
         Psi_dot = Psi_dot*3.1416/180
         print('Sensor ThetaM is '+str(ThetaM) +
               '\nSensor psi_dot is '+str(Psi_dot), file=stderr)
@@ -100,16 +102,14 @@ class Controllo(threading.Thread):
     def run(self):
         offset = self.initOffset(gyro)
         sleep(1)
-        motor.on_for_degrees(45, 45, -95, brake=True, block=True)
+        motor.on_for_degrees(20, 20, -120, brake=True, block=True)
         self.rackUp(rack)
         u = [[]]
         ThetaList = []
         Psi_dotList=[]
         millisecondsStart = time()
-        u = self.control(0, 0, 0, 0, 0)
         ThetaList.append(0)
         Psi_dotList.append(0)
-        self.m.update(u)
         PI=3.14
         while True:
             t = time()
@@ -121,8 +121,9 @@ class Controllo(threading.Thread):
             Psi_dot=Psi_dot%(2*PI)
             Psi_dotList.append(Psi_dot)
             Psi=self.integrate(Psi_dotList, millisecondsStart, t)
+            Psi=Psi%(2*PI)
             print("Observer Psi is "+str(Psi), file=stderr)
-            Theta=ThetaM+Psi
+            Theta=(ThetaM+Psi)%(2*PI)
             print("Observer Theta is "+str(Theta), file=stderr)
             ThetaList.append(Theta)
             Theta_dot=self.derivativeTheta(ThetaList, len(ThetaList)-2, millisecondsStart, t)
